@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bay Area Karaoke — Business Intelligence Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --blue: #185FA5; --green: #1D9E75; --amber: #EF9F27; --coral: #D85A30;
+    --purple: #533BB7; --gray: #73726c; --bg: #f5f4f0; --card: #ffffff;
+    --text: #1a1a18; --muted: #73726c; --border: rgba(0,0,0,0.08);
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--text); font-size: 14px; }
+  header { background: var(--card); border-bottom: 1px solid var(--border);
+           padding: 1rem 2rem; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header span { font-size: 12px; color: var(--muted); padding: 3px 10px;
+                background: #f0eee8; border-radius: 20px; }
+  .main { padding: 1.5rem 2rem; max-width: 1280px; margin: 0 auto; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .tab { padding: 8px 18px; font-size: 13px; font-weight: 500; cursor: pointer;
+         border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent;
+         transition: all .15s; margin-bottom: -1px; }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .tab:hover:not(.active) { color: var(--text); }
+  .page { display: none; }
+  .page.active { display: block; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+  .metric { background: var(--card); border-radius: 10px; padding: 1rem 1.25rem;
+            border: 1px solid var(--border); }
+  .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase;
+                  letter-spacing: .06em; margin-bottom: 4px; }
+  .metric-value { font-size: 26px; font-weight: 600; color: var(--text); line-height: 1.1; }
+  .metric-sub { font-size: 11px; margin-top: 4px; color: var(--muted); }
+  .metric-sub.up { color: var(--green); }
+  .metric-sub.warn { color: var(--amber); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 1.5rem; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 1.5rem; }
+  .card { background: var(--card); border-radius: 10px; padding: 1.25rem;
+          border: 1px solid var(--border); }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--muted);
+                text-transform: uppercase; letter-spacing: .06em; margin-bottom: 1rem; }
+  .chart-wrap { position: relative; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 6px 8px; font-size: 11px; font-weight: 600;
+       color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+       border-bottom: 1px solid var(--border); }
+  td { padding: 8px 8px; border-bottom: 1px solid #f0eeea; color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #faf9f6; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px;
+           font-size: 11px; font-weight: 500; }
+  .badge-ktv  { background: #e6f1fb; color: #185FA5; }
+  .badge-hyb  { background: #eaf3de; color: #3B6D11; }
+  .badge-pub  { background: #faeeda; color: #854F0B; }
+  .stars { color: #EF9F27; }
+  .insight-box { background: #eaf3de; border-left: 3px solid var(--green);
+                 border-radius: 0 8px 8px 0; padding: 0.85rem 1rem; margin-top: 1rem; font-size: 13px; }
+  .insight-box strong { color: #27500A; }
+  .opp-row { padding: 10px 0; border-bottom: 1px solid #f0eeea; cursor: pointer; }
+  .opp-row:last-child { border-bottom: none; }
+  .opp-row:hover { background: #faf9f6; margin: 0 -1.25rem; padding: 10px 1.25rem; }
+  .opp-title { font-weight: 600; font-size: 13px; }
+  .opp-meta  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; margin-left: 6px; }
+  .pill-high { background: #e6f1fb; color: #185FA5; }
+  .pill-med  { background: #faeeda; color: #854F0B; }
+  .sql-block { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 1rem 1.25rem;
+               font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px;
+               line-height: 1.7; overflow-x: auto; margin-bottom: 12px; }
+  .sql-kw { color: #89dceb; } .sql-fn { color: #a6e3a1; } .sql-str { color: #f38ba8; }
+  .sql-cm { color: #585b70; }
+  @media(max-width:900px) { .metrics { grid-template-columns:1fr 1fr; } .grid2,.grid3 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div style="font-size:20px">🎤</div>
+  <h1>Bay Area Karaoke — Business Intelligence</h1>
+  <span>Portfolio Project · Data Analyst</span>
+  <span style="margin-left:auto">8,000 bookings · 3,000 reviews · 15 venues</span>
+</header>
+
+<div class="main">
+  <div class="tabs">
+    <button class="tab active" onclick="showPage('overview')">Overview</button>
+    <button class="tab" onclick="showPage('revenue')">Revenue</button>
+    <button class="tab" onclick="showPage('competitive')">Competitive</button>
+    <button class="tab" onclick="showPage('opportunities')">Opportunities</button>
+    <button class="tab" onclick="showPage('sql')">SQL Queries</button>
+  </div>
+
+  <!-- ── OVERVIEW ── -->
+  <div id="page-overview" class="page active">
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Total Revenue</div>
+        <div class="metric-value">$4.7M</div>
+        <div class="metric-sub up">↑ 2023–2025 period</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg Booking Value</div>
+        <div class="metric-value">$587</div>
+        <div class="metric-sub">Per room session</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg Spend / Person</div>
+        <div class="metric-value">$105</div>
+        <div class="metric-sub">Incl. F&B</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">F&B Share of Revenue</div>
+        <div class="metric-value">81%</div>
+        <div class="metric-sub warn">Primary revenue driver</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Revenue by City</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="cityChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Revenue by Venue Format</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="formatDonut"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Monthly Seasonality (2023–2025)</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="seasonChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Weekend vs Weekday Split</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="weekSplit"></canvas></div>
+        <div class="insight-box">
+          <strong>Key insight:</strong> Weekdays generate 56% of revenue — the off-peak opportunity is real. Corporate events and happy hours can unlock this segment.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── REVENUE ── -->
+  <div id="page-revenue" class="page">
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">SF Revenue</div>
+        <div class="metric-value">$2.46M</div>
+        <div class="metric-sub up">52% of total</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">South Bay Revenue</div>
+        <div class="metric-value">$1.17M</div>
+        <div class="metric-sub up">25% of total</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Highest AOV Segment</div>
+        <div class="metric-value">Friends</div>
+        <div class="metric-sub">$603 avg booking</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Top F&B Item</div>
+        <div class="metric-value">Cocktails</div>
+        <div class="metric-sub warn">Highest revenue driver</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Avg Revenue by Visit Type</div>
+        <div class="chart-wrap" style="height:260px"><canvas id="visitChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Room Size Economics</div>
+        <div class="chart-wrap" style="height:260px"><canvas id="roomChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Demand Heatmap — Day × Hour (Booking Count)</div>
+      <div class="chart-wrap" style="height:260px"><canvas id="heatChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── COMPETITIVE ── -->
+  <div id="page-competitive" class="page">
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Venue Comparison Table</div>
+        <table>
+          <thead>
+            <tr><th>Venue</th><th>Format</th><th>City</th><th>Rating</th><th>Reviews</th><th>Rooms</th></tr>
+          </thead>
+          <tbody id="venueTable"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Rating vs Revenue Bubble Chart</div>
+        <div class="chart-wrap" style="height:320px"><canvas id="bubbleChart"></canvas></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Bubble size = Yelp review count</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Review Distribution by Format</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="reviewDist"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── OPPORTUNITIES ── -->
+  <div id="page-opportunities" class="page">
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Opportunity Matrix — ROI vs Ease of Execution</div>
+        <div class="chart-wrap" style="height:320px"><canvas id="oppMatrix"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Ranked Opportunities</div>
+        <div class="opp-row">
+          <div class="opp-title">Corporate & tech team events <span class="pill pill-high">High ROI</span></div>
+          <div class="opp-meta">Post-RTO demand · $2K–$10K per booking · SF + South Bay</div>
+        </div>
+        <div class="opp-row">
+          <div class="opp-title">K-pop / anime themed rooms <span class="pill pill-high">High ROI</span></div>
+          <div class="opp-meta">Gen Z / Asian-American demand · Viral social media · Premium pricing</div>
+        </div>
+        <div class="opp-row">
+          <div class="opp-title">South Bay / SJ expansion <span class="pill pill-high">High ROI</span></div>
+          <div class="opp-meta">Lower rent · Underserved · Large Korean/Vietnamese/Filipino community</div>
+        </div>
+        <div class="opp-row">
+          <div class="opp-title">Mini KTV kiosks (malls / BART) <span class="pill pill-med">Medium ROI</span></div>
+          <div class="opp-meta">Low capex ($30–80K) · Pay-per-song · First-mover advantage</div>
+        </div>
+        <div class="opp-row">
+          <div class="opp-title">AI voice enhancement + recording <span class="pill pill-med">Medium ROI</span></div>
+          <div class="opp-meta">Shareable clips → organic marketing · Tech differentiator</div>
+        </div>
+        <div class="opp-row">
+          <div class="opp-title">Daytime family segment <span class="pill pill-med">Low risk</span></div>
+          <div class="opp-meta">No liquor license needed · Boba + snacks · Fills off-peak hours</div>
+        </div>
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="card">
+        <div class="card-title">Market Growth Forecast</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="mktChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Revenue per Venue by Region</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="revPerVenue"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Financial Model (8-Room Venue)</div>
+        <table>
+          <tr><th>Item</th><th style="text-align:right">Amount</th></tr>
+          <tr><td>Startup cost</td><td style="text-align:right;color:#D85A30">$592K</td></tr>
+          <tr><td>Monthly fixed costs</td><td style="text-align:right;color:#D85A30">$58.7K</td></tr>
+          <tr><td>Break-even covers/day</td><td style="text-align:right">~50</td></tr>
+          <tr><td>Yr 1 target revenue</td><td style="text-align:right;color:#1D9E75">$750K+</td></tr>
+          <tr><td>Net margin range</td><td style="text-align:right;color:#1D9E75">10–20%</td></tr>
+          <tr><td>Owner salary range</td><td style="text-align:right;color:#1D9E75">$60–200K</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SQL ── -->
+  <div id="page-sql" class="page">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Featured SQL Query — Revenue by City</div>
+      <div class="sql-block"><span class="sql-kw">SELECT</span>
+    city,
+    <span class="sql-fn">COUNT</span>(*) <span class="sql-kw">AS</span> total_bookings,
+    <span class="sql-fn">ROUND</span>(<span class="sql-fn">SUM</span>(total_revenue), 2) <span class="sql-kw">AS</span> total_revenue,
+    <span class="sql-fn">ROUND</span>(<span class="sql-fn">AVG</span>(per_person_spend), 2) <span class="sql-kw">AS</span> avg_per_person,
+    <span class="sql-fn">ROUND</span>(<span class="sql-fn">SUM</span>(total_revenue) /
+          <span class="sql-fn">COUNT</span>(<span class="sql-kw">DISTINCT</span> venue_id), 2) <span class="sql-kw">AS</span> revenue_per_venue
+<span class="sql-kw">FROM</span> bookings
+<span class="sql-kw">GROUP BY</span> city
+<span class="sql-kw">ORDER BY</span> total_revenue <span class="sql-kw">DESC</span>;</div>
+      <table>
+        <thead><tr><th>City</th><th>Bookings</th><th>Total Revenue</th><th>Avg Per Person</th></tr></thead>
+        <tbody>
+          <tr><td>San Francisco</td><td>4,024</td><td style="color:var(--green)">$2,455,658</td><td>$109.58</td></tr>
+          <tr><td>San Jose</td><td>2,001</td><td style="color:var(--green)">$1,172,517</td><td>$105.04</td></tr>
+          <tr><td>Fremont</td><td>677</td><td>$372,752</td><td>$99.65</td></tr>
+          <tr><td>Millbrae</td><td>646</td><td>$358,213</td><td>$100.35</td></tr>
+          <tr><td>Milpitas</td><td>652</td><td>$338,051</td><td>$92.53</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Weekend vs Weekday Query</div>
+        <div class="sql-block"><span class="sql-kw">SELECT</span>
+    <span class="sql-kw">CASE WHEN</span> is_weekend
+        <span class="sql-kw">THEN</span> <span class="sql-str">'Weekend'</span>
+        <span class="sql-kw">ELSE</span> <span class="sql-str">'Weekday'</span>
+    <span class="sql-kw">END AS</span> day_type,
+    <span class="sql-fn">COUNT</span>(*) <span class="sql-kw">AS</span> bookings,
+    <span class="sql-fn">ROUND</span>(<span class="sql-fn">AVG</span>(total_revenue), 2) <span class="sql-kw">AS</span> avg_revenue,
+    <span class="sql-fn">ROUND</span>(<span class="sql-fn">SUM</span>(total_revenue) * 100.0 /
+      (<span class="sql-kw">SELECT</span> <span class="sql-fn">SUM</span>(total_revenue)
+       <span class="sql-kw">FROM</span> bookings), 1)
+    <span class="sql-kw">AS</span> revenue_share_pct
+<span class="sql-kw">FROM</span> bookings
+<span class="sql-kw">GROUP BY</span> is_weekend;</div>
+      </div>
+      <div class="card">
+        <div class="card-title">YoY Growth — Window Function</div>
+        <div class="sql-block"><span class="sql-kw">WITH</span> yearly <span class="sql-kw">AS</span> (
+  <span class="sql-kw">SELECT</span> city, year,
+    <span class="sql-fn">SUM</span>(total_revenue) <span class="sql-kw">AS</span> revenue
+  <span class="sql-kw">FROM</span> bookings
+  <span class="sql-kw">GROUP BY</span> city, year
+)
+<span class="sql-kw">SELECT</span>
+  a.city, a.year,
+  <span class="sql-fn">ROUND</span>(a.revenue, 2) <span class="sql-kw">AS</span> revenue,
+  <span class="sql-fn">ROUND</span>((a.revenue - b.revenue)
+    * 100.0 / b.revenue, 1)
+  <span class="sql-kw">AS</span> yoy_growth_pct
+<span class="sql-kw">FROM</span> yearly a
+<span class="sql-kw">LEFT JOIN</span> yearly b
+  <span class="sql-kw">ON</span> a.city = b.city
+  <span class="sql-kw">AND</span> a.year = b.year + 1;</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BLUE='#185FA5',GREEN='#1D9E75',AMBER='#EF9F27',CORAL='#D85A30',PURPLE='#533BB7',GRAY='#73726c';
+const gridColor='rgba(0,0,0,0.06)', textColor='#73726c';
+const def = { responsive:true, maintainAspectRatio:false,
+              plugins:{legend:{display:false}},
+              scales:{x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:11}}},
+                      y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:11}}}} };
+
+// City chart
+new Chart('cityChart',{type:'bar',data:{
+  labels:['San Francisco','San Jose','Fremont','Millbrae','Milpitas'],
+  datasets:[{data:[2455658,1172517,372752,358213,338051],
+    backgroundColor:[BLUE,GREEN,AMBER,CORAL,PURPLE],borderRadius:4,borderSkipped:false}]
+},options:{...def,plugins:{legend:{display:false}},
+  scales:{...def.scales,y:{...def.scales.y,ticks:{...def.scales.y.ticks,callback:v=>'$'+Math.round(v/1e6*10)/10+'M'}}}}});
+
+// Format donut
+new Chart('formatDonut',{type:'doughnut',data:{
+  labels:['KTV Private','Hybrid','Public Stage'],
+  datasets:[{data:[48,32,20],backgroundColor:[BLUE,GREEN,AMBER],borderWidth:0}]
+},options:{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{position:'bottom',labels:{color:textColor,boxWidth:10,font:{size:11}}}}}});
+
+// Seasonality
+const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+new Chart('seasonChart',{type:'line',data:{
+  labels:months,
+  datasets:[
+    {label:'2023',data:[48,62,52,55,74,58,52,55,60,58,65,82],borderColor:BLUE,tension:.4,pointRadius:2,fill:false},
+    {label:'2024',data:[52,68,57,60,80,63,56,60,65,63,72,92],borderColor:GREEN,tension:.4,pointRadius:2,fill:false},
+    {label:'2025',data:[56,73,61,null,null,null,null,null,null,null,null,null],borderColor:AMBER,tension:.4,pointRadius:2,fill:false,borderDash:[4,3]},
+  ]
+},options:{...def,plugins:{legend:{display:true,position:'top',labels:{color:textColor,boxWidth:10,font:{size:11}}}},
+  scales:{...def.scales,y:{...def.scales.y,ticks:{...def.scales.y.ticks,callback:v=>v+'K'}}}}});
+
+// Weekend split
+new Chart('weekSplit',{type:'bar',data:{
+  labels:['Weekday','Weekend'],
+  datasets:[{data:[2656080,2041112],backgroundColor:[BLUE,AMBER],borderRadius:6,barThickness:60}]
+},options:{...def,scales:{...def.scales,y:{...def.scales.y,ticks:{...def.scales.y.ticks,callback:v=>'$'+Math.round(v/1e6*10)/10+'M'}}}}});
+
+// Visit type
+new Chart('visitChart',{type:'bar',data:{
+  labels:['Friends','Walk-in','Bachelorette','Corporate','Birthday','Date Night'],
+  datasets:[{data:[603,599,591,585,582,559],backgroundColor:[BLUE,GREEN,AMBER,CORAL,PURPLE,GRAY],borderRadius:4}]
+},options:{...def,indexAxis:'y',scales:{x:{...def.scales.x,ticks:{callback:v=>'$'+v}},y:{...def.scales.y}}}});
+
+// Room chart
+new Chart('roomChart',{type:'bar',data:{
+  labels:['Small','Medium','Large'],
+  datasets:[
+    {label:'Room Revenue',data:[52,98,178],backgroundColor:BLUE,borderRadius:4,borderSkipped:false},
+    {label:'F&B Revenue', data:[412,490,610],backgroundColor:GREEN,borderRadius:4,borderSkipped:false}
+  ]
+},options:{...def,plugins:{legend:{display:true,position:'top',labels:{color:textColor,boxWidth:10,font:{size:11}}}},
+  scales:{...def.scales,x:{...def.scales.x,stacked:false},y:{...def.scales.y,ticks:{...def.scales.y.ticks,callback:v=>'$'+v}}}}});
+
+// Demand heatmap (simplified as matrix bar)
+const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const hrs=[17,18,19,20,21,22];
+const heatData=hrs.map(h=>days.map((_,i)=>{
+  const base=[5,6,7,9,18,22,14][i];
+  return Math.round(base*(1+(h-17)*0.15+Math.random()*2));
+}));
+new Chart('heatChart',{type:'bar',data:{
+  labels:days,
+  datasets:hrs.map((h,hi)=>({
+    label:h+':00',data:heatData[hi],
+    backgroundColor:`rgba(24,95,165,${0.15+hi*0.15})`,
+    borderRadius:2,borderSkipped:false
+  }))
+},options:{...def,plugins:{legend:{display:true,position:'top',labels:{color:textColor,boxWidth:8,font:{size:10}}}},
+  scales:{x:{...def.scales.x,stacked:true},y:{...def.scales.y,stacked:true,ticks:{...def.scales.y.ticks,callback:v=>v+' bkgs'}}}}});
+
+// Venue table
+const venues=[
+  {name:"The Mint",fmt:"public_stage",city:"San Francisco",r:4.2,rev:1842,rooms:0},
+  {name:"Pandora",fmt:"hybrid",city:"San Francisco",r:4.0,rev:987,rooms:6},
+  {name:"K Time",fmt:"ktv_private",city:"San Francisco",r:4.3,rev:756,rooms:10},
+  {name:"3910 Bar",fmt:"ktv_private",city:"San Francisco",r:4.1,rev:623,rooms:8},
+  {name:"Silver Cloud",fmt:"hybrid",city:"San Francisco",r:4.4,rev:1203,rooms:4},
+  {name:"Focus Karaoke",fmt:"ktv_private",city:"San Jose",r:4.2,rev:891,rooms:12},
+  {name:"Neon Star",fmt:"ktv_private",city:"San Jose",r:4.4,rev:612,rooms:16},
+  {name:"Pure Karaoke",fmt:"ktv_private",city:"Milpitas",r:4.0,rev:445,rooms:14},
+  {name:"Singarama",fmt:"public_stage",city:"Oakland",r:4.3,rev:467,rooms:0},
+];
+const fmtBadge={ktv_private:'<span class="badge badge-ktv">KTV</span>',hybrid:'<span class="badge badge-hyb">Hybrid</span>',public_stage:'<span class="badge badge-pub">Public</span>'};
+const tb=document.getElementById('venueTable');
+venues.forEach(v=>{
+  const stars='★'.repeat(Math.round(v.r))+'☆'.repeat(5-Math.round(v.r));
+  tb.innerHTML+=`<tr><td><strong>${v.name}</strong></td><td>${fmtBadge[v.fmt]}</td><td>${v.city}</td><td><span class="stars">${stars}</span> ${v.r}</td><td>${v.rev.toLocaleString()}</td><td>${v.rooms||'—'}</td></tr>`;
+});
+
+// Bubble chart
+new Chart('bubbleChart',{type:'bubble',data:{datasets:[
+  {label:'The Mint',data:[{x:4.2,y:2.1,r:18}],backgroundColor:BLUE+'bb'},
+  {label:'Silver Cloud',data:[{x:4.4,y:1.4,r:16}],backgroundColor:GREEN+'bb'},
+  {label:'K Time',data:[{x:4.3,y:1.2,r:12}],backgroundColor:AMBER+'bb'},
+  {label:'Focus (SJ)',data:[{x:4.2,y:1.0,r:13}],backgroundColor:CORAL+'bb'},
+  {label:'Neon Star',data:[{x:4.4,y:0.9,r:10}],backgroundColor:PURPLE+'bb'},
+  {label:'Pandora',data:[{x:4.0,y:1.1,r:14}],backgroundColor:GRAY+'bb'},
+]},options:{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:true,position:'right',labels:{color:textColor,boxWidth:10,font:{size:11}}}},
+  scales:{x:{min:3.7,max:4.7,grid:{color:gridColor},ticks:{color:textColor,font:{size:11}},title:{display:true,text:'Yelp Rating',color:textColor}},
+          y:{min:0.5,max:2.5,grid:{color:gridColor},ticks:{color:textColor,font:{size:11},callback:v=>'$'+v+'M'},title:{display:true,text:'Total Revenue',color:textColor}}}}});
+
+// Review distribution
+new Chart('reviewDist',{type:'bar',data:{
+  labels:['1★','2★','3★','4★','5★'],
+  datasets:[
+    {label:'KTV Private',data:[25,45,120,480,380],backgroundColor:BLUE,borderRadius:3},
+    {label:'Hybrid',data:[20,38,95,360,290],backgroundColor:GREEN,borderRadius:3},
+    {label:'Public Stage',data:[15,30,75,250,180],backgroundColor:AMBER,borderRadius:3},
+  ]
+},options:{...def,plugins:{legend:{display:true,position:'top',labels:{color:textColor,boxWidth:10,font:{size:11}}}},
+  scales:{...def.scales,x:{...def.scales.x},y:{...def.scales.y,ticks:{...def.scales.y.ticks,callback:v=>v+' reviews'}}}}});
+
+// Opportunity matrix
+new Chart('oppMatrix',{type:'bubble',data:{datasets:[
+  {label:'Corp events',data:[{x:72,y:88,r:22}],backgroundColor:BLUE+'cc'},
+  {label:'K-pop rooms',data:[{x:60,y:92,r:18}],backgroundColor:GREEN+'cc'},
+  {label:'South Bay',data:[{x:66,y:75,r:25}],backgroundColor:AMBER+'cc'},
+  {label:'Mini KTV',data:[{x:55,y:80,r:14}],backgroundColor:CORAL+'cc'},
+  {label:'AI recording',data:[{x:70,y:65,r:12}],backgroundColor:PURPLE+'cc'},
+  {label:'Family daytime',data:[{x:80,y:55,r:11}],backgroundColor:GRAY+'cc'},
+]},options:{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:true,position:'bottom',labels:{color:textColor,boxWidth:10,font:{size:11}}}},
+  scales:{x:{min:40,max:95,grid:{color:gridColor},ticks:{color:textColor,font:{size:11}},title:{display:true,text:'Ease of Execution →',color:textColor,font:{size:11}}},
+          y:{min:40,max:100,grid:{color:gridColor},ticks:{color:textColor,font:{size:11}},title:{display:true,text:'ROI Potential →',color:textColor,font:{size:11}}}}}});
+
+// Market growth
+new Chart('mktChart',{type:'line',data:{
+  labels:['2022','2023','2024','2025','2026','2027'],
+  datasets:[{data:[5.1,5.4,5.7,5.9,6.1,6.3],borderColor:BLUE,backgroundColor:'rgba(24,95,165,.08)',fill:true,tension:.4,pointRadius:3}]
+},options:{...def,scales:{...def.scales,y:{...def.scales.y,ticks:{...def.scales.y.ticks,callback:v=>'$'+v+'B'}}}}});
+
+// Rev per venue
+new Chart('revPerVenue',{type:'bar',data:{
+  labels:['SF','South Bay','Peninsula','East Bay'],
+  datasets:[{data:[491,586,358,373],backgroundColor:[BLUE,GREEN,AMBER,CORAL],borderRadius:4}]
+},options:{...def,scales:{...def.scales,y:{...def.scales.y,ticks:{...def.scales.y.ticks,callback:v=>'$'+v+'K'}}}}});
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
